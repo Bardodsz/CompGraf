@@ -1,4 +1,3 @@
-import java.awt.Canvas;
 import java.awt.Color;
 import java.awt.Font;
 import java.awt.Graphics;
@@ -34,6 +33,12 @@ public class MainCanvas extends JPanel implements Runnable {
     byte bufferDeVideo[];
 
     Random rand = new Random();
+
+    Rotacao2D rotacao;
+
+    Shear shear = new Shear(0.0, 0.0);
+
+    Clipping clipping;
 
     byte memoriaPlacaVideo[];
     short paleta[][];
@@ -85,28 +90,18 @@ public class MainCanvas extends JPanel implements Runnable {
 
         pixelSize = W * H;
 
-
         imgtmp = loadImage("fundo.jpg");
 
         imageBuffer = new BufferedImage(W, H, BufferedImage.TYPE_4BYTE_ABGR);
-        //imageBuffer.getGraphics().drawImage(imgtmp, 0, 0, null);
-
-
         bufferDeVideo = ((DataBufferByte) imageBuffer.getRaster().getDataBuffer()).getData();
 
         System.out.println("Buffer SIZE " + bufferDeVideo.length);
 
-//		p1 = new Ponto2D(100, 100, 1);
-//		p2 = new Ponto2D(500, 100, 1);
-//		p3 = new Ponto2D(300, 400, 1);
-//
-//		l1 = new Linha2D(p1,p2);
-//		l2 = new Linha2D(p2,p3);
-//		l3 = new Linha2D(p3,p1);
-
         p1 = new Ponto2D(50, 50, 1);
         p2 = new Ponto2D(250, 50, 1);
         p3 = new Ponto2D(150, 200, 1);
+        rotacao = new Rotacao2D(0.0);
+        clipping = new Clipping(0, 0, W, H);
 
         listaDePontos.add(p1);
         listaDePontos.add(p2);
@@ -148,6 +143,21 @@ public class MainCanvas extends JPanel implements Runnable {
             @Override
             public void keyPressed(KeyEvent e) {
                 int key = e.getKeyCode();
+
+                if (key == KeyEvent.VK_LEFT) {
+                    // Diminuir o ângulo de rotação quando a seta esquerda for pressionada
+                    double novoAngulo = rotacao.getAngulo() - Math.toRadians(5); // Altere o valor de 5 conforme necessário
+                    rotacao.setAngulo(novoAngulo);
+                    // Chame o método para rotacionar as linhas com o novo ângulo
+                    rotacao.rotacionarListaLinhas(listaDeLinhas);
+                } else if (key == KeyEvent.VK_RIGHT) {
+                    // Aumentar o ângulo de rotação quando a seta direita for pressionada
+                    double novoAngulo = rotacao.getAngulo() + Math.toRadians(5); // Altere o valor de 5 conforme necessário
+                    rotacao.setAngulo(novoAngulo);
+                    // Chame o método para rotacionar as linhas com o novo ângulo
+                    rotacao.rotacionarListaLinhas(listaDeLinhas);
+                }
+
                 //System.out.println("CLICO "+key);
                 if (key == KeyEvent.VK_W) {
                     Mat3x3 mat = new Mat3x3();
@@ -178,34 +188,26 @@ public class MainCanvas extends JPanel implements Runnable {
                     }
                 }
                 if (key == KeyEvent.VK_Z) {
-                    Mat3x3 mat = new Mat3x3();
-                    mat.setTranslate(-500, -400);
-                    for (int i = 0; i < listaDePontos.size(); i++) {
-                        listaDePontos.get(i).multiplicaMat(mat);
-                    }
-                    mat.setSacale(1.1, 1.1);
-                    for (int i = 0; i < listaDePontos.size(); i++) {
-                        listaDePontos.get(i).multiplicaMat(mat);
-                    }
-                    mat.setTranslate(500, 400);
-                    for (int i = 0; i < listaDePontos.size(); i++) {
-                        listaDePontos.get(i).multiplicaMat(mat);
-                    }
+                    rotacao.setAngulo(rotacao.getAngulo() + Math.PI / 18); // Rotaciona 10 graus (pi/18 radianos) à direita
+                    rotacao.rotacionarListaPontos(listaDePontos);
+                    rotacao.rotacionarListaLinhas(listaDeLinhas);
                 }
                 if (key == KeyEvent.VK_X) {
-                    Mat3x3 mat = new Mat3x3();
-                    mat.setTranslate(-500, -400);
-                    for (int i = 0; i < listaDePontos.size(); i++) {
-                        listaDePontos.get(i).multiplicaMat(mat);
-                    }
-                    mat.setSacale(0.9, 0.9);
-                    for (int i = 0; i < listaDePontos.size(); i++) {
-                        listaDePontos.get(i).multiplicaMat(mat);
-                    }
-                    mat.setTranslate(500, 400);
-                    for (int i = 0; i < listaDePontos.size(); i++) {
-                        listaDePontos.get(i).multiplicaMat(mat);
-                    }
+                    rotacao.setAngulo(rotacao.getAngulo() - Math.PI / 18); // Rotaciona 10 graus (pi/18 radianos) à esquerda
+                    rotacao.rotacionarListaPontos(listaDePontos);
+                    rotacao.rotacionarListaLinhas(listaDeLinhas);
+                }
+                if (key == KeyEvent.VK_H) {
+                    // Modifica o cisalhamento horizontal
+                    shear.setShearX(0.1); // Ajuste conforme necessário
+                    shear.applyShear(listaDePontos);
+                    shear.applyShearToPointList(listaDeLinhas);
+                }
+                if (key == KeyEvent.VK_V) {
+                    // Modifica o cisalhamento vertical
+                    shear.setShearY(0.1); // Ajuste conforme necessário
+                    shear.applyShear(listaDePontos);
+                    shear.applyShearToPointList(listaDeLinhas);
                 }
                 if (key == KeyEvent.VK_F1) {
                     try {
@@ -221,6 +223,7 @@ public class MainCanvas extends JPanel implements Runnable {
                         e1.printStackTrace();
                     }
                 }
+
                 if (key == KeyEvent.VK_F2) {
                     listaDeLinhas.clear();
                     listaDePontos.clear();
@@ -375,6 +378,13 @@ public class MainCanvas extends JPanel implements Runnable {
 
         g.setColor(Color.black);
         g.drawString("FPS " + fps, 10, 25);
+
+        for (Linha2D linha : listaDeLinhas) {
+            clipping.clipLine(linha);
+            if (linha.a != null && linha.b != null) {
+                linha.desenhase((Graphics2D) g);
+            }
+        }
     }
 
     public void desenhaLinhaHorizontal(int x, int y, int w) {
